@@ -35,6 +35,12 @@ Or run both together:
 npm run dev:full
 ```
 
+6. Build for production:
+
+```bash
+npm run build
+```
+
 ## Routes
 
 - Restaurant directory: `http://localhost:5173/`
@@ -50,10 +56,12 @@ npm run dev:full
 - `GET /api/public/restaurants/:restaurantSlug/menu`
 - `GET /api/public/restaurants/:restaurantSlug/orders/latest/:tableCode`
 - `POST /api/public/restaurants/:restaurantSlug/orders`
+- `POST /api/public/restaurants/:restaurantSlug/orders/:orderId/cancel`
 - `POST /api/public/restaurants/:restaurantSlug/waiter-calls`
 - `GET /api/public/restaurants/:restaurantSlug/tables/:tableCode/qr`
 - `POST /api/admin/restaurants/:restaurantSlug/login`
 - `GET /api/admin/restaurants/:restaurantSlug/orders`
+- `GET /api/admin/restaurants/:restaurantSlug/orders/history`
 - `GET /api/admin/restaurants/:restaurantSlug/summary`
 - `GET /api/admin/restaurants/:restaurantSlug/waiter-calls`
 - `GET /api/admin/restaurants/:restaurantSlug/tables`

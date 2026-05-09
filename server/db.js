@@ -131,7 +131,7 @@ export async function createDatabasePool() {
   await pool.query(
     `
       ALTER TABLE orders
-      MODIFY COLUMN status ENUM('pending', 'preparing', 'served', 'paid') NOT NULL DEFAULT 'pending'
+      MODIFY COLUMN status ENUM('pending', 'preparing', 'served', 'paid', 'cancelled') NOT NULL DEFAULT 'pending'
     `,
   );
   await seedDefaults(pool);

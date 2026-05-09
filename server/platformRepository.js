@@ -340,7 +340,13 @@ export async function getLatestOrderForTable(pool, restaurantSlug, tableCode) {
       SELECT id
       FROM orders
       WHERE restaurant_id = ? AND table_id = ?
-      ORDER BY created_at DESC
+      ORDER BY
+        CASE
+          WHEN status IN ('pending', 'preparing', 'served') THEN 0
+          ELSE 1
+        END,
+        updated_at DESC,
+        created_at DESC
       LIMIT 1
     `,
     [restaurant.id, table.id],
@@ -399,7 +405,7 @@ export async function getAdminOrders(pool, restaurantSlug) {
     `
       SELECT id
       FROM orders
-      WHERE restaurant_id = ? AND created_at >= ? AND created_at < ? AND status <> 'paid'
+      WHERE restaurant_id = ? AND created_at >= ? AND created_at < ? AND status NOT IN ('paid', 'cancelled')
       ORDER BY created_at DESC
     `,
     [restaurant.id, start, end],
@@ -415,7 +421,10 @@ export async function getAdminOrderHistory(pool, restaurantSlug) {
     `
       SELECT id
       FROM orders
-      WHERE restaurant_id = ? AND (created_at < ? OR (created_at >= ? AND created_at < ? AND status = 'paid'))
+      WHERE restaurant_id = ? AND (
+        created_at < ?
+        OR (created_at >= ? AND created_at < ? AND status IN ('paid', 'cancelled'))
+      )
       ORDER BY created_at DESC
     `,
     [restaurant.id, start, start, end],
@@ -425,13 +434,29 @@ export async function getAdminOrderHistory(pool, restaurantSlug) {
 }
 
 export async function updateOrderStatus(pool, restaurantSlug, orderId, status) {
-  if (!["pending", "preparing", "served", "paid"].includes(status)) {
+  if (!["pending", "preparing", "served", "paid", "cancelled"].includes(status)) {
     throw new Error("Invalid order status.");
   }
 
   const restaurant = await getRestaurantRecord(pool, restaurantSlug);
-  await pool.query(`UPDATE orders SET status = ? WHERE id = ? AND restaurant_id = ?`, [status, orderId, restaurant.id]);
-  return getOrderById(pool, restaurant.id, orderId);
+  const [result] = await pool.query(
+    `UPDATE orders SET status = ? WHERE id = ? AND restaurant_id = ?`,
+    [status, orderId, restaurant.id],
+  );
+
+  if (result.affectedRows === 0) {
+    const error = new Error("Order not found.");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const updatedOrder = await getOrderById(pool, restaurant.id, orderId);
+  if (!updatedOrder) {
+    const error = new Error("Order not found.");
+    error.statusCode = 404;
+    throw error;
+  }
+  return updatedOrder;
 }
 
 export async function createWaiterCall(pool, restaurantSlug, tableCode) {
@@ -473,7 +498,7 @@ export async function getDashboardSummary(pool, restaurantSlug) {
       SELECT
         COUNT(*) AS totalOrders,
         COALESCE(SUM(total), 0) AS revenue,
-        SUM(CASE WHEN status NOT IN ('served', 'paid') THEN 1 ELSE 0 END) AS openOrders
+        SUM(CASE WHEN status NOT IN ('served', 'paid', 'cancelled') THEN 1 ELSE 0 END) AS openOrders
       FROM orders
       WHERE restaurant_id = ? AND created_at >= ? AND created_at < ?
     `,
@@ -489,6 +514,27 @@ export async function getDashboardSummary(pool, restaurantSlug) {
     openOrders: salesRow.openOrders,
     waiterCalls: waiterRow.waiterCalls,
   };
+}
+
+export async function cancelOrder(pool, restaurantSlug, orderId, tableCode) {
+  const restaurant = await getRestaurantRecord(pool, restaurantSlug);
+  const table = await getTableRecord(pool, restaurant.id, tableCode);
+  const order = await getOrderById(pool, restaurant.id, orderId);
+
+  if (!order || order.tableCode !== table.tableCode) {
+    throw new Error("Order not found.");
+  }
+
+  if (order.status !== "pending") {
+    throw new Error("Only pending orders can be cancelled.");
+  }
+
+  await pool.query(
+    `UPDATE orders SET status = 'cancelled' WHERE id = ? AND restaurant_id = ?`,
+    [orderId, restaurant.id],
+  );
+
+  return getOrderById(pool, restaurant.id, orderId);
 }
 
 async function getRestaurantMenuById(pool, restaurantId, onlyAvailable) {

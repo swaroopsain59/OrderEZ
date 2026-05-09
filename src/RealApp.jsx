@@ -86,6 +86,18 @@ function RealApp() {
   }, [deferredQuery, filters.category, menuItems]);
 
   useEffect(() => {
+    if (!errorMessage) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setErrorMessage("");
+    }, 4000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [errorMessage]);
+
+  useEffect(() => {
     const socket = io(getSocketServerUrl(), {
       path: "/socket.io",
       transports: ["websocket", "polling"],
@@ -184,19 +196,11 @@ function RealApp() {
     setSummary(dashboardSummary);
     setTables(restaurantTables);
     setAdminMenuItems(adminMenu);
+    setErrorMessage("");
     setSelectedOrderId((currentSelectedOrderId) =>
       [...validOrders, ...validHistoryOrders].some((order) => order.id === currentSelectedOrderId)
         ? currentSelectedOrderId
         : validOrders[0]?.id ?? null,
-    );
-  }
-
-  function replaceOrderInCollections(updatedOrder) {
-    setOrders((currentOrders) =>
-      currentOrders.map((order) => (order.id === updatedOrder.id ? updatedOrder : order)),
-    );
-    setHistoryOrders((currentOrders) =>
-      currentOrders.map((order) => (order.id === updatedOrder.id ? updatedOrder : order)),
     );
   }
 
@@ -267,6 +271,27 @@ function RealApp() {
     }
   }
 
+  async function cancelOrder() {
+    if (!activeOrder || activeOrder.status !== "pending") return;
+    setErrorMessage("");
+    setIsSubmitting(true);
+
+    try {
+      const updatedOrder = await apiFetch(
+        `/api/public/restaurants/${restaurantSlug}/orders/${activeOrder.id}/cancel`,
+        {
+          method: "POST",
+          body: JSON.stringify({ tableCode }),
+        },
+      );
+      setActiveOrder(updatedOrder);
+    } catch (error) {
+      setErrorMessage(toDisplayMessage(error, "Couldn't cancel the order."));
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   async function loginAdmin(event) {
     event.preventDefault();
     setErrorMessage("");
@@ -300,33 +325,35 @@ function RealApp() {
       setHistoryOrders((currentOrders) =>
         currentOrders.map((order) => (order.id === orderId ? { ...order, status } : order)),
       );
-      const updatedOrder = await adminFetch(
+      await adminFetch(
         `/api/admin/restaurants/${restaurantSlug}/orders/${orderId}/status`,
         adminToken,
         {
           method: "PATCH",
           body: JSON.stringify({ status }),
+          timeoutMs: 8000,
         },
       );
-
-      replaceOrderInCollections(updatedOrder);
-
-      try {
-        const [dashboardSummary, freshOrders] = await Promise.all([
-          adminFetch(`/api/admin/restaurants/${restaurantSlug}/summary`, adminToken),
-          adminFetch(`/api/admin/restaurants/${restaurantSlug}/orders`, adminToken),
-        ]);
-        setSummary(dashboardSummary);
-        setOrders(freshOrders.filter(Boolean));
-      } catch {
-        // Keep the status update successful even if the summary refresh is briefly unavailable.
-      }
+      setSelectedOrderId(orderId);
+      setErrorMessage("");
     } catch (error) {
+      if (error?.status === 401) {
+        window.sessionStorage.removeItem(ADMIN_SESSION_KEY);
+        setAdminToken("");
+        setErrorMessage("Session expired. Please log in again.");
+        return;
+      }
       setOrders(previousOrders);
       setHistoryOrders(previousHistoryOrders);
       setErrorMessage(toDisplayMessage(error, "Couldn't update the order status. Please try again."));
     } finally {
       setUpdatingOrderId("");
+    }
+
+    try {
+      await loadAdminSurface(adminToken);
+    } catch (error) {
+      setErrorMessage(toDisplayMessage(error, "Couldn't refresh the admin queue. Please try again."));
     }
   }
 
@@ -533,6 +560,7 @@ function RealApp() {
             isSubmitting={isSubmitting}
             placeOrder={placeOrder}
             requestWaiter={requestWaiter}
+            cancelOrder={cancelOrder}
             setBillSplit={setBillSplit}
             splitAmount={splitAmount}
             updateFilter={updateFilter}

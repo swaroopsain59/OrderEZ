@@ -8,6 +8,7 @@ function GuestView({
   cart,
   cartTotals,
   categories,
+  cancelOrder,
   changeQuantity,
   filteredMenuItems,
   filters,
@@ -21,7 +22,7 @@ function GuestView({
   const [isOrderOpen, setIsOrderOpen] = useState(false);
 
   useEffect(() => {
-    setIsOrderOpen(Boolean(activeOrder) && !["served", "paid"].includes(activeOrder.status));
+    setIsOrderOpen(Boolean(activeOrder) && !["served", "paid", "cancelled"].includes(activeOrder.status));
   }, [activeOrder?.id, activeOrder?.status]);
 
   return (
@@ -59,27 +60,33 @@ function GuestView({
         </div>
 
         <div className="menu-grid">
-          {filteredMenuItems.map((item) => (
-            <article key={item.id} className="menu-item">
-              <div className="menu-item-head">
-                <div>
-                  <p className="item-category">{item.category}</p>
-                  <h4>{item.name}</h4>
+          {filteredMenuItems.map((item) => {
+            const cartItem = cart.find((entry) => entry.id === item.id);
+            return (
+              <article key={item.id} className="menu-item">
+                <div className="menu-item-head">
+                  <div>
+                    <p className="item-category">{item.category}</p>
+                    <h4>{item.name}</h4>
+                  </div>
+                  <span className="item-tag">{item.tag}</span>
                 </div>
-                <span className="item-tag">{item.tag}</span>
-              </div>
-              <p className="item-description">{item.description}</p>
-              <div className="menu-item-foot">
-                <div className="menu-item-price">
-                  <strong>{currency.format(item.price)}</strong>
-                  <span>{item.prepTime}</span>
+                <p className="item-description">{item.description}</p>
+                <div className="menu-item-foot">
+                  <div className="menu-item-price">
+                    <strong>{currency.format(item.price)}</strong>
+                    <span>{item.prepTime}</span>
+                  </div>
+                  <button
+                    className={`${cartItem ? "secondary-button" : "primary-button"} compact`}
+                    onClick={() => addToCart(item)}
+                  >
+                    {cartItem ? `Added (${cartItem.quantity})` : "Add"}
+                  </button>
                 </div>
-                <button className="primary-button compact" onClick={() => addToCart(item)}>
-                  Add
-                </button>
-              </div>
-            </article>
-          ))}
+              </article>
+            );
+          })}
         </div>
       </section>
 
@@ -166,6 +173,11 @@ function GuestView({
                     <span>Bill total</span>
                     <strong>{currency.format(activeOrder.total)}</strong>
                   </div>
+                  {activeOrder.status === "pending" ? (
+                    <button className="secondary-button full-width" disabled={isSubmitting} onClick={cancelOrder}>
+                      {isSubmitting ? "Cancelling..." : "Cancel order"}
+                    </button>
+                  ) : null}
                 </>
               ) : null}
             </>

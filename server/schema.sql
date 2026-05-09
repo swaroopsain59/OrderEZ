@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS orders (
   id CHAR(36) PRIMARY KEY,
   restaurant_id VARCHAR(64) NOT NULL,
   table_id VARCHAR(64) NOT NULL,
-  status ENUM('pending', 'preparing', 'served', 'paid') NOT NULL DEFAULT 'pending',
+  status ENUM('pending', 'preparing', 'served', 'paid', 'cancelled') NOT NULL DEFAULT 'pending',
   subtotal INT NOT NULL,
   gst INT NOT NULL,
   total INT NOT NULL,

@@ -2,6 +2,8 @@ import express from "express";
 import cors from "cors";
 import { createServer } from "node:http";
 import crypto from "node:crypto";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 import QRCode from "qrcode";
 import { Server as SocketServer } from "socket.io";
 import { createDatabasePool } from "./db.js";
@@ -12,6 +14,7 @@ import {
   createMenuItem,
   createRestaurant,
   createWaiterCall,
+  cancelOrder,
   getAdminOrders,
   getAdminOrderHistory,
   getAdminMenu,
@@ -29,6 +32,8 @@ import {
 } from "./platformRepository.js";
 
 const activeAdminTokens = new Map();
+const distDir = resolve("dist");
+const distIndex = resolve(distDir, "index.html");
 
 function isAllowedOrigin(origin) {
   return !origin || config.clientOrigins.includes(origin);
@@ -112,6 +117,21 @@ async function bootstrap() {
     }
   });
 
+  app.post("/api/public/restaurants/:restaurantSlug/orders/:orderId/cancel", async (request, response, next) => {
+    try {
+      const order = await cancelOrder(
+        pool,
+        request.params.restaurantSlug,
+        request.params.orderId,
+        request.body.tableCode,
+      );
+      await emitUpdates(io, pool, request.params.restaurantSlug, order.tableCode);
+      response.json(order);
+    } catch (error) {
+      next(error);
+    }
+  });
+
   app.post("/api/public/restaurants/:restaurantSlug/waiter-calls", async (request, response, next) => {
     try {
       await createWaiterCall(pool, request.params.restaurantSlug, request.body.tableCode);
@@ -126,7 +146,7 @@ async function bootstrap() {
     try {
       const restaurantSlug = request.params.restaurantSlug;
       const tableCode = request.params.tableCode;
-      const targetUrl = `${config.clientOrigin}/r/${restaurantSlug}/table/${tableCode}`;
+      const targetUrl = `${config.appOrigin}/r/${restaurantSlug}/table/${tableCode}`;
       const svg = await QRCode.toString(targetUrl, { type: "svg", margin: 1, width: 320 });
       response.setHeader("Content-Type", "image/svg+xml");
       response.send(svg);
@@ -194,7 +214,7 @@ async function bootstrap() {
 
   app.get("/api/admin/restaurants/:restaurantSlug/tables", async (request, response, next) => {
     try {
-      response.json(await getRestaurantTables(pool, request.params.restaurantSlug, config.clientOrigin));
+      response.json(await getRestaurantTables(pool, request.params.restaurantSlug, config.appOrigin));
     } catch (error) {
       next(error);
     }
@@ -258,8 +278,17 @@ async function bootstrap() {
     }
   });
 
+  if (existsSync(distIndex)) {
+    app.use(express.static(distDir));
+
+    app.get(/^\/(?!api).*/, (_request, response) => {
+      response.sendFile(distIndex);
+    });
+  }
+
   app.use((error, _request, response, _next) => {
-    response.status(500).json({ message: error.message || "Unexpected server error." });
+    const status = Number.isInteger(error.statusCode) ? error.statusCode : 500;
+    response.status(status).json({ message: error.message || "Unexpected server error." });
   });
 
   server.listen(config.port, () => {
