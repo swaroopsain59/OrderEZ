@@ -13,6 +13,7 @@ export const STATUS_LABELS = {
   preparing: "Preparing",
   served: "Served",
   paid: "Paid",
+  cancelled: "Cancelled",
 };
 
 export const currency = new Intl.NumberFormat("en-IN", {
@@ -23,6 +24,7 @@ export const currency = new Intl.NumberFormat("en-IN", {
 
 export function getStatusTone(status) {
   if (status === "paid") return "tone-paid";
+  if (status === "cancelled") return "tone-cancelled";
   if (status === "served") return "tone-served";
   if (status === "preparing") return "tone-preparing";
   return "tone-pending";

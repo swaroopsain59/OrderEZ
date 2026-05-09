@@ -615,6 +615,11 @@ button {
   color: #1f6570;
 }
 
+.tone-cancelled {
+  background: rgba(120, 63, 63, 0.16);
+  color: #7a3d3d;
+}
+
 .progress-steps {
   display: grid;
   gap: 12px;
