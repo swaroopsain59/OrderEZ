@@ -20,6 +20,8 @@ function AdminWorkspace({
   onUpdateMenuItem,
   onUpdateOrderStatus,
   orders,
+  restaurant,
+  restaurantSlug,
   selectedOrder,
   summary,
   tables,
@@ -34,6 +36,7 @@ function AdminWorkspace({
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isQrSectionOpen, setIsQrSectionOpen] = useState(false);
   const [openQrTableCode, setOpenQrTableCode] = useState("");
+  const [isQuickMenuOpen, setIsQuickMenuOpen] = useState(false);
   const currentOrder = selectedOrder && Array.isArray(selectedOrder.items) ? selectedOrder : null;
 
   useEffect(() => {
@@ -69,14 +72,77 @@ function AdminWorkspace({
     setMenuMessage("Deleted menu item.");
   }
 
+  function openPanel(panelId) {
+    if (panelId === "history") {
+      setIsHistoryOpen(true);
+    }
+    if (panelId === "menu") {
+      setIsMenuOpen(true);
+    }
+    if (panelId === "qr") {
+      setIsQrSectionOpen(true);
+    }
+
+    setIsQuickMenuOpen(false);
+    window.setTimeout(() => {
+      document.getElementById(`admin-${panelId}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 60);
+  }
+
   return (
-    <div className="workspace admin-layout">
+    <div className="admin-flow">
+      <header className="admin-appbar">
+        <div className="admin-appbar-brand">
+          <div className="admin-appbar-logo" aria-hidden="true">OZ</div>
+          <div>
+            <p className="eyebrow">OrderEZ</p>
+            <strong>{restaurant?.name ?? "Admin desk"}</strong>
+          </div>
+        </div>
+
+        <div className="guest-quick-menu-wrap">
+          <button
+            type="button"
+            className={`guest-quick-menu-button ${isQuickMenuOpen ? "active" : ""}`}
+            onClick={() => setIsQuickMenuOpen((current) => !current)}
+            aria-label="Open admin quick menu"
+            aria-expanded={isQuickMenuOpen}
+          >
+            <span />
+            <span />
+            <span />
+          </button>
+
+          {isQuickMenuOpen ? (
+            <div className="guest-quick-menu admin-quick-menu">
+              <button type="button" className="guest-menu-action" onClick={() => openPanel("queue")}>
+                Open queue
+              </button>
+              <button type="button" className="guest-menu-action" onClick={() => openPanel("history")}>
+                View history
+              </button>
+              <button type="button" className="guest-menu-action" onClick={() => openPanel("menu")}>
+                Manage menu
+              </button>
+              <button type="button" className="guest-menu-action" onClick={() => openPanel("qr")}>
+                Table QR links
+              </button>
+              <a className="guest-menu-action" href={`/r/${restaurantSlug}/table/T1`}>
+                Customer view
+              </a>
+            </div>
+          ) : null}
+        </div>
+      </header>
+
+      <div className="workspace admin-layout">
       <section className="ops-panel">
-        <div className="section-heading">
+        <div id="admin-queue" className="section-heading">
           <div>
             <p className="eyebrow">Operations</p>
             <h3>Kitchen, floor, and menu dashboard</h3>
           </div>
+          <div className="table-chip">Open {summary.openOrders} | Calls {summary.waiterCalls}</div>
         </div>
 
         <div className="kpi-row">
@@ -108,7 +174,7 @@ function AdminWorkspace({
           )}
         </div>
 
-        <section className="summary-panel history-panel">
+        <section id="admin-history" className="summary-panel history-panel">
           <div className="section-heading compact-space">
             <div>
               <p className="eyebrow">History</p>
@@ -146,7 +212,7 @@ function AdminWorkspace({
           </div>
         </section>
 
-        <section className="summary-panel admin-menu-panel">
+        <section id="admin-menu" className="summary-panel admin-menu-panel">
           <div className="section-heading compact-space">
             <div>
               <p className="eyebrow">Menu manager</p>
@@ -258,7 +324,7 @@ function AdminWorkspace({
           )}
         </section>
 
-        <section className="tracking-panel">
+        <section id="admin-qr" className="tracking-panel">
           <div className="section-heading compact-space">
             <div>
               <p className="eyebrow">Floor assistance</p>
@@ -344,6 +410,7 @@ function AdminWorkspace({
           </div>
         </section>
       </aside>
+      </div>
     </div>
   );
 }
