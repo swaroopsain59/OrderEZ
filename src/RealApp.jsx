@@ -59,6 +59,9 @@ function RealApp() {
   const activeView = route.kind === "admin" || route.kind === "admin-directory" ? "admin" : "guest";
   const restaurantSlug = route.restaurantSlug;
   const tableCode = route.tableCode;
+  const isGuestRoute = route.kind === "guest";
+  const isAdminWorkspaceRoute = route.kind === "admin" && Boolean(adminToken);
+  const isImmersiveRoute = isGuestRoute || isAdminWorkspaceRoute;
 
   const categories = useMemo(() => ["All", ...CATEGORY_ORDER], []);
   const cartTotals = useMemo(() => calculateOrderTotals(cart), [cart]);
@@ -210,16 +213,17 @@ function RealApp() {
     });
   }
 
-  function addToCart(item) {
+  function addToCart(item, quantity = 1) {
+    const safeQuantity = Math.max(1, Number(quantity) || 1);
     setCart((currentCart) => {
       const existingItem = currentCart.find((cartItem) => cartItem.id === item.id);
       if (existingItem) {
         return currentCart.map((cartItem) =>
-          cartItem.id === item.id ? { ...cartItem, quantity: cartItem.quantity + 1 } : cartItem,
+          cartItem.id === item.id ? { ...cartItem, quantity: cartItem.quantity + safeQuantity } : cartItem,
         );
       }
 
-      return [...currentCart, { ...item, quantity: 1 }];
+      return [...currentCart, { ...item, quantity: safeQuantity }];
     });
   }
 
@@ -420,112 +424,86 @@ function RealApp() {
 
   return (
     <div className="app-shell">
-      <header className="topbar">
-        <div>
-          <p className="eyebrow">QR Dining OS</p>
-          <h1>OrderEZ</h1>
-        </div>
-        <div className="topbar-actions">
-          {route.kind === "guest" ? (
-            <>
-              <div className="table-chip">{restaurantInfo?.restaurant?.name ?? "Restaurant"} | {tableCode}</div>
-              <a className="ghost-link" href="/admin">Staff login</a>
-            </>
-          ) : route.kind === "admin" ? (
-            <>
-              <div className="table-chip">{restaurantSlug} admin</div>
-              <a className="ghost-link" href={`/r/${restaurantSlug}/table/T1`}>Customer menu</a>
-            </>
-          ) : (
-            <a className="ghost-link" href="/">All restaurants</a>
-          )}
-        </div>
-      </header>
+      {!isImmersiveRoute ? (
+        <header className="topbar">
+          <div>
+            <p className="eyebrow">QR Dining OS</p>
+            <h1>OrderEZ</h1>
+          </div>
+          <div className="topbar-actions">
+            {route.kind === "admin" ? (
+              <>
+                <div className="table-chip">{restaurantSlug} admin</div>
+                <a className="ghost-link" href={`/r/${restaurantSlug}/table/T1`}>Customer menu</a>
+              </>
+            ) : (
+              <a className="ghost-link" href="/">All restaurants</a>
+            )}
+          </div>
+        </header>
+      ) : null}
 
       <main>
-        <section className="hero">
-          <div className="hero-copy">
-            <p className="eyebrow">
-              {route.kind === "guest"
-                ? `${restaurantInfo?.restaurant?.name ?? "Restaurant"} guest flow`
-                : route.kind === "admin"
+        {!isImmersiveRoute ? (
+          <section className="hero">
+            <div className="hero-copy">
+              <p className="eyebrow">
+                {route.kind === "admin"
                   ? `${restaurantInfo?.restaurant?.name ?? restaurantSlug ?? "Restaurant"} admin desk`
                   : "Multi-tenant restaurant platform"}
-            </p>
-            <h2>Scan, order, track, and settle the bill without waiting for the menu.</h2>
-            <p className="hero-text">
-              {route.kind === "guest"
-                ? `${restaurantInfo?.restaurant?.tagline ?? "Table-first ordering"} Guests scan a table QR, land on the correct cafe menu, and place table-bound orders in real time.`
-                : route.kind === "admin"
+              </p>
+              <h2>Scan, order, track, and settle the bill without waiting for the menu.</h2>
+              <p className="hero-text">
+                {route.kind === "admin"
                   ? "Each restaurant gets its own isolated admin dashboard, QR tables, orders, waiter calls, and live kitchen status updates."
                   : "OrderEZ now supports many restaurants on one platform with separate slugs, tables, QR targets, and MySQL-backed data isolation."}
-            </p>
-            <div className="hero-actions">
-              {route.kind === "guest" ? (
-                <>
-                  <button className="primary-button" onClick={() => window.scrollTo({ top: 560, behavior: "smooth" })}>Start ordering</button>
-                  <button className="secondary-button" onClick={requestWaiter}>Call waiter</button>
-                </>
-              ) : route.kind === "admin" ? (
-                <>
-                  <button className="primary-button" onClick={() => window.scrollTo({ top: 560, behavior: "smooth" })}>Open queue</button>
-                  <a className="secondary-link" href={`/r/${restaurantSlug}/table/T1`}>View customer flow</a>
-                </>
-              ) : (
-                <>
-                  <a className="primary-button" href="/r/gulab-ji-chai-bani-park/table/T1">Open demo QR flow</a>
-                  <a className="secondary-link" href="/admin/gulab-ji-chai-bani-park">Open demo admin</a>
-                </>
-              )}
+              </p>
+              <div className="hero-actions">
+                {route.kind === "admin" ? (
+                  <>
+                    <button className="primary-button" onClick={() => window.scrollTo({ top: 560, behavior: "smooth" })}>Open queue</button>
+                    <a className="secondary-link" href={`/r/${restaurantSlug}/table/T1`}>View customer flow</a>
+                  </>
+                ) : (
+                  <>
+                    <a className="primary-button" href="/r/gulab-ji-chai-bani-park/table/T1">Open demo QR flow</a>
+                    <a className="secondary-link" href="/admin/gulab-ji-chai-bani-park">Open demo admin</a>
+                  </>
+                )}
+              </div>
+              {errorMessage ? <p className="error-text">{errorMessage}</p> : null}
             </div>
-            {errorMessage ? <p className="error-text">{errorMessage}</p> : null}
-          </div>
 
-          <div className="hero-panel">
-            <div className="stat-strip">
-              {route.kind === "guest" ? (
-                <>
-                  <span>Live menu from API</span>
-                  <span>{menuItems.length} dishes available</span>
-                  <span>{activeOrder ? activeOrder.id.slice(0, 8) : "No order yet"}</span>
-                </>
-              ) : route.kind === "admin" ? (
-                <>
-                  <span>{summary.totalOrders} orders</span>
-                  <span>{summary.openOrders} open</span>
-                  <span>{currency.format(summary.revenue)} revenue</span>
-                </>
-              ) : (
-                <>
-                  <span>{restaurants.length} restaurants</span>
-                  <span>Per-table QR routing</span>
-                  <span>Tenant-isolated orders</span>
-                </>
-              )}
-            </div>
-            <div className="hero-visual">
-              <div className="orb orb-one" />
-              <div className="orb orb-two" />
-              <div className="visual-card">
-                <p>{route.kind === "guest" ? "Current order" : route.kind === "admin" ? "Operations snapshot" : "Platform snapshot"}</p>
-                <strong>
-                  {route.kind === "guest"
-                    ? activeOrder?.id?.slice(0, 8) ?? "No order yet"
-                    : route.kind === "admin"
-                      ? `${summary.openOrders} active`
-                      : `${restaurants.length} clients`}
-                </strong>
-                <span className={`status-pill ${getStatusTone(activeOrder?.status ?? "pending")}`}>
-                  {route.kind === "guest"
-                    ? activeOrder ? STATUS_LABELS[activeOrder.status] : "Ready to order"
-                    : route.kind === "admin"
-                      ? `${summary.waiterCalls} waiter calls`
-                      : "QR ready"}
-                </span>
+            <div className="hero-panel">
+              <div className="stat-strip">
+                {route.kind === "admin" ? (
+                  <>
+                    <span>{summary.totalOrders} orders</span>
+                    <span>{summary.openOrders} open</span>
+                    <span>{currency.format(summary.revenue)} revenue</span>
+                  </>
+                ) : (
+                  <>
+                    <span>{restaurants.length} restaurants</span>
+                    <span>Per-table QR routing</span>
+                    <span>Tenant-isolated orders</span>
+                  </>
+                )}
+              </div>
+              <div className="hero-visual">
+                <div className="orb orb-one" />
+                <div className="orb orb-two" />
+                <div className="visual-card">
+                  <p>{route.kind === "admin" ? "Operations snapshot" : "Platform snapshot"}</p>
+                  <strong>{route.kind === "admin" ? `${summary.openOrders} active` : `${restaurants.length} clients`}</strong>
+                  <span className={`status-pill ${getStatusTone(activeOrder?.status ?? "pending")}`}>
+                    {route.kind === "admin" ? `${summary.waiterCalls} waiter calls` : "QR ready"}
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
-        </section>
+          </section>
+        ) : null}
 
         {isLoading ? <section className="loading-panel">Loading live restaurant data...</section> : null}
 
@@ -559,11 +537,14 @@ function RealApp() {
             filters={filters}
             isSubmitting={isSubmitting}
             placeOrder={placeOrder}
+            restaurant={restaurantInfo?.restaurant}
             requestWaiter={requestWaiter}
             cancelOrder={cancelOrder}
             setBillSplit={setBillSplit}
             splitAmount={splitAmount}
+            tableCode={tableCode}
             updateFilter={updateFilter}
+            errorMessage={errorMessage}
           />
         ) : null}
 
@@ -588,6 +569,8 @@ function RealApp() {
             onUpdateOrderStatus={updateOrderStatus}
             orders={orders}
             historyOrders={historyOrders}
+            restaurant={restaurantInfo?.restaurant}
+            restaurantSlug={restaurantSlug}
             selectedOrder={selectedOrder}
             summary={summary}
             tables={tables}
